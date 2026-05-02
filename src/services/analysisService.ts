@@ -184,6 +184,9 @@ export async function analyzeStateData(stateName: string): Promise<StateAnalysis
     const text = response.text;
     if (!text) return null;
     const result = JSON.parse(text) as StateAnalysis;
+    result.stateName = stateName;
+    result.overall_score = data.overall_score;
+    result.national_rank = data.national_rank;
 
     // For demo purposes, if infrastructure is stale (mock logic), mark it as estimated
     if (result.scores && result.scores.infrastructure && result.scores.infrastructure.data_age_days > 15) {

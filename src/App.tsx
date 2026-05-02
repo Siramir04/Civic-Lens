@@ -12,23 +12,32 @@ import { NewsItem, StateAnalysis } from "./types";
 
 export default function App() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [comparisonState, setComparisonState] = useState<string | null>(null);
   const [newsDigest, setNewsDigest] = useState<NewsItem[] | null>(null);
   const [analysis, setAnalysis] = useState<StateAnalysis | null>(null);
+  const [comparisonAnalysis, setComparisonAnalysis] = useState<StateAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"news" | "analysis" | "validator">("news");
+  const [activeTab, setActiveTab] = useState<"news" | "analysis" | "validator" | "compare">("news");
 
-  const fetchData = async (stateName: string) => {
-    setActiveTab("news");
+  const fetchData = async (stateName: string, isComparison: boolean = false) => {
+    if (!isComparison) {
+      setActiveTab("news");
+    }
     setIsLoading(true);
     setError(null);
     try {
-      const [newsData, analysisData] = await Promise.all([
-        generateStateNews(stateName),
-        analyzeStateData(stateName)
-      ]);
-      setNewsDigest(newsData);
-      setAnalysis(analysisData);
+      if (isComparison) {
+        const analysisData = await analyzeStateData(stateName);
+        setComparisonAnalysis(analysisData);
+      } else {
+        const [newsData, analysisData] = await Promise.all([
+          generateStateNews(stateName),
+          analyzeStateData(stateName)
+        ]);
+        setNewsDigest(newsData);
+        setAnalysis(analysisData);
+      }
     } catch (err) {
       console.error(err);
       setError("FAILED TO ESTABLISH CONNECTION TO CIVIC DATA NODES");
@@ -38,8 +47,16 @@ export default function App() {
   };
 
   const handleStateSelect = (stateName: string) => {
-    setSelectedState(stateName);
-    fetchData(stateName);
+    if (activeTab === "compare") {
+      if (stateName === selectedState) return;
+      setComparisonState(stateName);
+      fetchData(stateName, true);
+    } else {
+      setSelectedState(stateName);
+      setComparisonState(null);
+      setComparisonAnalysis(null);
+      fetchData(stateName);
+    }
   };
 
   return (
@@ -92,7 +109,11 @@ export default function App() {
             
             <div className="flex flex-col gap-10">
               <div className="rounded-3xl overflow-hidden shadow-2xl border border-zinc-800/50">
-                <NigeriaMap onStateSelect={handleStateSelect} selectedStateId={selectedState} />
+                <NigeriaMap 
+                  onStateSelect={handleStateSelect} 
+                  selectedStateId={selectedState} 
+                  comparisonStateId={comparisonState}
+                />
               </div>
               
               <div className="pt-10 border-t border-zinc-800/50">
@@ -152,6 +173,13 @@ export default function App() {
                   >
                     <BarChart3 size={18} />
                     {activeTab === 'analysis' && <span className="text-[11px] font-mono uppercase tracking-tighter">Audit</span>}
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("compare")}
+                    className={`px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 ${activeTab === 'compare' ? 'bg-white text-zinc-950 font-bold shadow-xl' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    <LayoutGrid size={18} />
+                    {activeTab === 'compare' && <span className="text-[11px] font-mono uppercase tracking-tighter">Compare</span>}
                   </button>
                   <div className="w-px h-8 bg-zinc-800 mx-2 self-center" />
                   <button 
@@ -214,11 +242,23 @@ export default function App() {
                   </motion.div>
                 ) : activeTab === 'validator' ? (
                   <SourceValidatorUI />
-                ) : (selectedState && (activeTab === 'news' ? newsDigest : analysis)) ? (
+                ) : (selectedState && (activeTab === 'news' ? newsDigest : (activeTab === 'compare' ? (analysis && comparisonAnalysis) || analysis : analysis))) ? (
                   activeTab === 'news' ? (
                     <NewsCard news={newsDigest || []} />
                   ) : (
-                    analysis && <AnalysisPanel analysis={analysis} />
+                    analysis && (
+                      <div className="flex flex-col h-full">
+                        {activeTab === 'compare' && !comparisonState && (
+                          <div className="px-8 py-4 bg-blue-500/10 border-b border-blue-500/20 flex items-center gap-3 animate-pulse">
+                            <Layers size={16} className="text-blue-400" />
+                            <span className="text-[10px] font-mono text-blue-400 uppercase tracking-widest font-black">
+                              Selection Required: Select a second state on the map to initialize comparative logic
+                            </span>
+                          </div>
+                        )}
+                        <AnalysisPanel analysis={analysis} comparisonAnalysis={comparisonAnalysis} />
+                      </div>
+                    )
                   )
                 ) : (
                   <motion.div 

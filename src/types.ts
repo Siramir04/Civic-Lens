@@ -57,6 +57,9 @@ export interface HistoricalScore {
 }
 
 export interface StateAnalysis {
+  stateName: string;
+  overall_score: number;
+  national_rank: number;
   verdict: string;
   scores: Record<Sector, SectorScore>;
   biggest_driver: {

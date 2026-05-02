@@ -14,7 +14,8 @@ import {
   Hammer,
   ChevronDown,
   Activity,
-  Layers
+  Layers,
+  Trophy
 } from "lucide-react";
 import { StateAnalysis, AIEstimate, Sector } from "../types";
 import ReasoningChain from "./ReasoningChain";
@@ -35,7 +36,13 @@ const SECTOR_COLORS: Record<string, string> = {
   infrastructure: "text-amber-400"
 };
 
-export default function AnalysisPanel({ analysis }: { analysis: StateAnalysis }) {
+export default function AnalysisPanel({ 
+  analysis, 
+  comparisonAnalysis 
+}: { 
+  analysis: StateAnalysis, 
+  comparisonAnalysis?: StateAnalysis | null 
+}) {
   const [activeEstimate, setActiveEstimate] = useState<AIEstimate | null>(null);
   const [viewMode, setViewMode] = useState<"quality" | "rank">("quality");
 
@@ -45,6 +52,8 @@ export default function AnalysisPanel({ analysis }: { analysis: StateAnalysis })
     return <Minus size={14} className="text-zinc-500" />;
   };
 
+  const isComparison = !!comparisonAnalysis;
+
   return (
     <div className="flex flex-col gap-8 overflow-y-auto max-h-[700px] pr-2 custom-scrollbar relative px-1">
       <AnimatePresence>
@@ -52,6 +61,43 @@ export default function AnalysisPanel({ analysis }: { analysis: StateAnalysis })
           <ReasoningChain estimate={activeEstimate} onClose={() => setActiveEstimate(null)} />
         )}
       </AnimatePresence>
+
+      {/* Comparison Header */}
+      {isComparison && (
+        <div className="flex flex-col gap-4">
+          <div className="p-6 bg-blue-500/10 border border-blue-500/20 rounded-3xl">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-mono text-blue-400 uppercase tracking-[0.4em] font-black mb-1">Comparative Logic Enabled</span>
+                <div className="flex items-center gap-4">
+                  <h3 className="text-lg font-display font-black text-white uppercase">{analysis.stateName}</h3>
+                  <div className="px-3 py-1 bg-zinc-950 text-zinc-600 font-mono text-[9px] rounded-full">VS</div>
+                  <h3 className="text-lg font-display font-black text-blue-400 uppercase">{comparisonAnalysis.stateName}</h3>
+                </div>
+              </div>
+              <Activity className="text-blue-500 animate-pulse" size={24} />
+            </div>
+          </div>
+
+          {/* Quick Comparison Data */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-5 bg-zinc-900/10 border border-zinc-800/50 rounded-3xl">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-black block mb-2">{analysis.stateName} Index</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-display font-black text-white">{analysis.overall_score}</span>
+                <span className="text-[10px] font-mono text-zinc-600 uppercase">Rank #{analysis.national_rank}</span>
+              </div>
+            </div>
+            <div className="p-5 bg-blue-500/5 border border-blue-500/10 rounded-3xl">
+              <span className="text-[9px] font-mono text-blue-500/50 uppercase tracking-widest font-black block mb-2">{comparisonAnalysis.stateName} Index</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-display font-black text-blue-400">{comparisonAnalysis.overall_score}</span>
+                <span className="text-[10px] font-mono text-blue-500/30 uppercase">Rank #{comparisonAnalysis.national_rank}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metric Mode Switcher */}
       <div className="flex items-center justify-between">
@@ -73,61 +119,106 @@ export default function AnalysisPanel({ analysis }: { analysis: StateAnalysis })
       </div>
 
       {/* Direct Intensity Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className={`grid gap-4 ${isComparison ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
         {CORE_SECTORS.map((sectorId) => {
-          const scoreData = analysis.scores[sectorId];
-          const insight = analysis.sector_insights.find(i => i.sector === sectorId);
+          const score1 = analysis.scores[sectorId];
+          const score2 = comparisonAnalysis?.scores[sectorId];
+          const insight1 = analysis.sector_insights.find(i => i.sector === sectorId);
+          const insight2 = comparisonAnalysis?.sector_insights.find(i => i.sector === sectorId);
           const Icon = SECTOR_ICONS[sectorId] || Shield;
           
-          if (!scoreData) return null;
+          if (!score1) return null;
           
-          const value = viewMode === "quality" ? scoreData.score : scoreData.national_percentile;
-          const label = viewMode === "quality" ? "Quality Index" : "Natl. Percentile";
+          const val1 = viewMode === "quality" ? score1.score : score1.national_percentile;
+          const val2 = score2 ? (viewMode === "quality" ? score2.score : score2.national_percentile) : null;
+          const label = viewMode === "quality" ? "Index" : "Rank";
+          
+          const isWinner1 = val2 !== null && val1 > val2;
+          const isWinner2 = val2 !== null && val2 > val1;
+          const diff = val2 !== null ? Math.abs(val1 - val2) : 0;
           
           return (
             <motion.div
               key={sectorId}
-              whileHover={{ y: -4 }}
-              className="p-6 bg-zinc-900/10 border border-zinc-800/50 rounded-[32px] flex flex-col gap-6 relative overflow-hidden group transition-all hover:bg-zinc-800/20 shadow-2xl"
+              whileHover={{ y: -2 }}
+              className={`p-6 bg-zinc-900/10 border border-zinc-800/50 rounded-[32px] flex flex-col gap-6 relative overflow-hidden group transition-all hover:bg-zinc-800/20 shadow-2xl ${isComparison ? 'border-l-4 border-l-blue-500/30' : ''}`}
             >
-              <div className="flex items-start justify-between relative z-10">
-                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-inner group-hover:border-white/20 transition-all">
-                  <Icon size={24} className={`${SECTOR_COLORS[sectorId]} group-hover:scale-110 transition-transform`} />
+              {isComparison && (isWinner1 || isWinner2) && (
+                <div className={`absolute top-0 right-0 px-4 py-1.5 rounded-bl-2xl flex items-center gap-2 text-[10px] font-mono font-black uppercase tracking-widest ${isWinner1 ? 'bg-emerald-500 text-zinc-950' : 'bg-blue-500 text-zinc-950'}`}>
+                  <Trophy size={12} />
+                  {isWinner1 ? analysis.stateName : comparisonAnalysis.stateName} Lead (+{diff}%)
                 </div>
-                <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-2">
-                    <span className="text-4xl font-display font-black text-white">{value}<span className="text-sm opacity-30">%</span></span>
-                    {insight && getTrendIcon(insight.trend)}
+              )}
+
+              <div className="flex items-start justify-between relative z-10">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-2xl shadow-inner group-hover:border-white/20 transition-all">
+                    <Icon size={24} className={`${SECTOR_COLORS[sectorId]} group-hover:scale-110 transition-transform`} />
                   </div>
-                  <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-black leading-none mt-1">{label}</span>
+                  <div>
+                    <h4 className="text-xl font-display font-black text-white uppercase tracking-tight leading-none mb-1">{sectorId}</h4>
+                    <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest font-black">{label} Comparison</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-8">
+                   <div className={`flex flex-col items-end ${isWinner1 ? 'scale-110' : 'opacity-40'}`}>
+                      <span className={`text-4xl font-display font-black ${isWinner1 ? 'text-white' : 'text-zinc-600'}`}>{val1}<span className="text-sm opacity-30">%</span></span>
+                      <span className={`text-[8px] font-mono uppercase tracking-tighter ${isWinner1 ? 'text-zinc-500' : 'text-zinc-700'}`}>{analysis.stateName}</span>
+                   </div>
+                   {isComparison && val2 !== null && (
+                     <>
+                        <div className="w-px h-8 bg-zinc-800" />
+                        <div className={`flex flex-col items-end ${isWinner2 ? 'scale-110' : 'opacity-40'}`}>
+                          <span className={`text-4xl font-display font-black ${isWinner2 ? 'text-blue-400' : 'text-zinc-600'}`}>{val2}<span className="text-sm opacity-30">%</span></span>
+                          <span className={`text-[8px] font-mono uppercase tracking-tighter ${isWinner2 ? 'text-blue-500' : 'text-zinc-700'}`}>{comparisonAnalysis.stateName}</span>
+                        </div>
+                     </>
+                   )}
                 </div>
               </div>
               
-              <div className="relative z-10">
-                <h4 className="text-lg font-display font-black text-white uppercase tracking-tight mb-2">{sectorId}</h4>
-                <p className="text-[11px] text-zinc-500 font-sans leading-relaxed line-clamp-2 h-8 group-hover:text-zinc-300 transition-colors">
-                  {insight?.insight || "Core metrics analyzed across verified civil society reports."}
-                </p>
-              </div>
-
-              {/* Intensity Pulse Bar */}
-              <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden blur-[0.5px]">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${value}%` }}
-                  className={`h-full ${SECTOR_COLORS[sectorId].replace('text', 'bg')} opacity-80 shadow-[0_0_8px_currentColor]`}
-                />
-              </div>
-
-              {scoreData.is_estimated && (
-                <div className="absolute top-2 right-2">
-                  <motion.div 
-                    animate={{ opacity: [0.4, 0.8, 0.4] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="w-1.5 h-1.5 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.5)]" 
-                  />
+              {isComparison && val2 !== null && (
+                <div className="relative h-3 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-900 shadow-inner">
+                   <div className="absolute inset-0 flex">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${val1}%` }} 
+                        className={`h-full opacity-30 ${SECTOR_COLORS[sectorId].replace('text', 'bg')}`}
+                      />
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${val2}%` }} 
+                        className="h-full opacity-60 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] border-l border-white/20"
+                      />
+                   </div>
+                   {/* Equilibrium Line */}
+                   <div className="absolute top-0 bottom-0 left-[50%] w-px bg-white/5" />
                 </div>
               )}
+
+              {!isComparison && (
+                 <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden blur-[0.5px]">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${val1}%` }}
+                      className={`h-full ${SECTOR_COLORS[sectorId].replace('text', 'bg')} opacity-80 shadow-[0_0_8px_currentColor]`}
+                    />
+                 </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+                  <span className="text-[9px] font-mono text-zinc-600 block mb-1 uppercase font-black">{analysis.stateName} Delta</span>
+                  {insight1?.insight || "Node performance metrics within expected variance."}
+                </p>
+                {isComparison && (
+                  <p className="text-[11px] text-blue-900/60 font-sans leading-relaxed border-l border-blue-500/10 pl-4">
+                    <span className="text-[9px] font-mono text-blue-500/40 block mb-1 uppercase font-black">{comparisonAnalysis.stateName} Delta</span>
+                    {insight2?.insight || "Node performance metrics within expected variance."}
+                  </p>
+                )}
+              </div>
             </motion.div>
           );
         })}

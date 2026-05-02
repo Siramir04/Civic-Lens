@@ -16,9 +16,9 @@ const DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Custom Dot Icon for a more "tech" look
-const createDotIcon = (isSelected: boolean, isHovered: boolean) => {
-  const size = isSelected || isHovered ? 24 : 12;
-  const color = isSelected ? "#ffffff" : "#444444";
+const createDotIcon = (isSelected: boolean, isComparison: boolean, isHovered: boolean) => {
+  const size = isSelected || isComparison || isHovered ? 24 : 12;
+  const color = isSelected ? "#ffffff" : isComparison ? "#3b82f6" : "#444444";
   
   return L.divIcon({
     className: "custom-div-icon",
@@ -28,7 +28,7 @@ const createDotIcon = (isSelected: boolean, isHovered: boolean) => {
       background-color: ${color}; 
       border: 2px solid white; 
       border-radius: 50%;
-      box-shadow: ${isSelected ? '0 0 20px rgba(255,255,255,0.5)' : 'none'};
+      box-shadow: ${isSelected ? '0 0 20px rgba(255,255,255,0.5)' : isComparison ? '0 0 20px rgba(59,130,246,0.5)' : 'none'};
       transition: all 0.3s ease;
     "></div>`,
     iconSize: [size, size],
@@ -64,7 +64,7 @@ function MapEvents({ onDeselect }: { onDeselect: () => void }) {
   return null;
 }
 
-export default function NigeriaMap({ onStateSelect, selectedStateId }: { onStateSelect: (stateName: string) => void, selectedStateId: string | null }) {
+export default function NigeriaMap({ onStateSelect, selectedStateId, comparisonStateId }: { onStateSelect: (stateName: string) => void, selectedStateId: string | null, comparisonStateId?: string | null }) {
   const [hoveredState, setHoveredState] = useState<string | null>(null);
 
   const mapInstance = useMemo(() => (
@@ -87,7 +87,7 @@ export default function NigeriaMap({ onStateSelect, selectedStateId }: { onState
         <Marker
           key={state.id}
           position={[state.lat, state.lng]}
-          icon={createDotIcon(selectedStateId === state.id, hoveredState === state.id)}
+          icon={createDotIcon(selectedStateId === state.id, comparisonStateId === state.id, hoveredState === state.id)}
           eventHandlers={{
             click: (e) => {
               L.DomEvent.stopPropagation(e);
@@ -99,7 +99,7 @@ export default function NigeriaMap({ onStateSelect, selectedStateId }: { onState
         />
       ))}
     </MapContainer>
-  ), [selectedStateId, hoveredState, onStateSelect]);
+  ), [selectedStateId, comparisonStateId, hoveredState, onStateSelect]);
 
   return (
     <div className="relative w-full h-[600px] bg-zinc-950 overflow-hidden group">
