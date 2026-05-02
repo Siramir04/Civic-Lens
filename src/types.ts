@@ -1,15 +1,27 @@
 
 export type Sector = "security" | "health" | "education" | "agriculture" | "economy" | "infrastructure" | "governance" | "cost_of_living";
 
+export type DataQualityFlag = "current" | "stale_12_24mo" | "stale_24mo_plus" | "partial" | "unavailable";
+export type Trend = "improving" | "declining" | "stable" | "mixed" | "insufficient_data";
+
 export interface NewsItem {
   headline: string;
-  summary: string;
-  sector: Sector;
-  source_name: string;
-  source_url: string | null;
-  published_at: string | null;
-  ai_generated: boolean;
-  confidence: "high" | "medium" | "low";
+  source: string;
+  date: string;
+  location: { state: string; lga: string | null };
+  sector_relevance: Sector[];
+  event_type: "conflict" | "policy" | "infrastructure" | "climate" | "health" | "education" | "economic";
+  source_claims: { claim: string; quantified: boolean }[];
+  verification_status: "verified" | "partial" | "unverified";
+  narrative_relevance: string;
+  published_at?: string; // Backwards compat
+}
+
+export interface ReasoningTrace {
+  data_points_provided: string[];
+  inferences_drawn: string[];
+  uncertainties_identified: string[];
+  counter_evidence_scenarios: string[];
 }
 
 export interface SectorScore {
@@ -19,41 +31,20 @@ export interface SectorScore {
   data_age_days: number;
   is_estimated?: boolean;
   estimate_data?: AIEstimate;
+  data_quality?: DataQualityFlag;
+  trend?: Trend;
 }
 
 export interface AIEstimate {
   state: string;
   sector: Sector;
-  estimated_score: number;
-  cannot_estimate: boolean;
-  cannot_estimate_reason: string | null;
-  drift_from_last_known: number;
-  drift_justified: boolean;
-  reasoning: {
-    anchor: string;
-    regional_signal: string;
-    grounding_findings: string;
-    factors_considered: {
-      factor: string;
-      direction: "up" | "down" | "neutral";
-      weight: "high" | "medium" | "low";
-    }[];
-    final_logic: string;
-  };
-  confidence: "low" | "very_low";
-  grounding_sources: {
-    title: string;
-    url: string | null;
-    relevance: string;
-  }[];
-  expires_at: string;
+  estimated_range: { low: number; high: number; unit: string };
+  confidence: "low" | "medium" | "high";
+  methodology: string;
+  proxy_indicators_used: string[];
+  warning: string;
+  reasoning_trace?: ReasoningTrace;
   generated_at: string;
-  is_estimated: true;
-}
-
-export interface HistoricalScore {
-  score_30d_ago: number;
-  score_90d_ago: number;
 }
 
 export interface StateAnalysis {
@@ -69,14 +60,14 @@ export interface StateAnalysis {
   };
   sector_insights: {
     sector: Sector;
-    trend: "improving" | "declining" | "stable";
-    insight: string;
-    stale: boolean;
+    trend: Trend;
+    data_quality_flag: DataQualityFlag;
+    summary: string;
+    key_concerns: string[];
+    comparative_context: string;
+    reasoning_trace?: ReasoningTrace;
   }[];
-  watch_list: Sector[];
-  bright_spots: Sector[];
   confidence_rating: "high" | "medium" | "low";
-  stale_sectors: Sector[];
   generated_at: string;
 }
 

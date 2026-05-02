@@ -1,228 +1,236 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Sector, SectorScore, HistoricalScore, StateAnalysis } from "../types";
+import { 
+  Sector, 
+  SectorScore, 
+  StateAnalysis, 
+  DataQualityFlag, 
+  Trend, 
+  AIEstimate,
+  ReasoningTrace
+} from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Mock data generator for demo purposes
-export function generateMockScores(stateName: string) {
+// MOCK DATA REPOSITORY (Simulated Database for Tier 0)
+// In a real app, this would be a Firestore or Postgres call
+const DATA_REPOSITORY: Record<string, any> = {
+  // Populated dynamically by generateMockData for demo
+};
+
+export function generateMockDataForVault(stateName: string) {
   const seed = stateName.length;
-  // Focus sectors: security, education, agriculture, infrastructure
   const sectors: Sector[] = ["security", "education", "agriculture", "infrastructure", "health", "cost_of_living"];
   
-  const current_scores: Record<string, SectorScore> = {};
-  const historical_scores: Record<string, HistoricalScore> = {};
+  const vault: Record<string, any> = {};
   
-  sectors.forEach((s, i) => {
-    const base = 40 + (seed * (i + 1)) % 40;
-    current_scores[s] = {
-      score: base,
-      national_percentile: Math.max(1, Math.min(99, 100 - ((seed * (i + 5)) % 99))),
-      source_tier: 1,
-      data_age_days: (seed * i) % 20
-    };
-    historical_scores[s] = {
-      score_30d_ago: base + (seed % 10) - 5,
-      score_90d_ago: base + (seed % 15) - 7
+  sectors.forEach((s) => {
+    const ageDays = (seed * s.length) % 800; // Some data will be very old
+    vault[s] = {
+      indicators: [
+        { name: `${s}_index_alpha`, value: 40 + (seed % 40) },
+        { name: `${s}_volume_beta`, value: 1000 + (seed * 10) }
+      ],
+      last_verified_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString(),
+      historical: [
+        { year: 2023, value: 45 },
+        { year: 2022, value: 42 }
+      ],
+      national_baseline: 50
     };
   });
 
-  return {
-    current_scores,
-    historical_scores,
-    overall_score: Math.round(Object.values(current_scores).reduce((a, b) => a + b.score, 0) / sectors.length),
-    national_average: 52,
-    national_rank: (seed % 36) + 1,
-    weights: { security: 0.25, education: 0.20, agriculture: 0.15, infrastructure: 0.20, health: 0.10, cost_of_living: 0.10 },
-    stale_threshold_days: 60
+  return vault;
+}
+
+// TIER 0: GROUNDING CHECK
+function getGroundingProtocol(stateName: string, sector: Sector) {
+  const vault = generateMockDataForVault(stateName);
+  const data = vault[sector];
+  if (!data) return { status: "unavailable", data: null };
+
+  const ageDays = Math.floor((Date.now() - new Date(data.last_verified_at).getTime()) / (1000 * 60 * 60 * 24));
+
+  if (ageDays <= 365) return { status: "current", data, ageDays };
+  if (ageDays <= 730) return { status: "stale_12_24mo", data, ageDays };
+  return { status: "stale_24mo_plus", data, ageDays };
+}
+
+// TIER 1 & 2 PROMPT GENERATOR
+async function invokeAIIntelligence(
+  tier: 1 | 2, 
+  stateName: string, 
+  sector: Sector, 
+  grounding: any
+): Promise<any> {
+  const isTier2 = tier === 2;
+  
+  const systemPrompt = isTier2 ? `
+    You are a statistical estimation assistant (CivicLens Tier 2). 
+    You generate ONLY conservative, interval-based estimates when primary data is unavailable.
+    STRICT: methodology must be explicit and auditable.
+    NEVER estimate conflict fatalities.
+  ` : `
+    You are a senior research analyst (CivicLens Tier 1). 
+    Synthesize verified data into neutral state profiles. 
+    Use ONLY provided data. Use Tier 4 Reasoning Trace.
+  `;
+
+  const userPrompt = `
+    STATE: ${stateName}
+    SECTOR: ${sector}
+    DATA_QUALITY: ${grounding.status}
+    DATASET: ${JSON.stringify(grounding.data)}
+  `;
+
+  const responseSchema = isTier2 ? {
+    type: Type.OBJECT,
+    properties: {
+      estimated_range: {
+        type: Type.OBJECT,
+        properties: {
+          low: { type: Type.NUMBER },
+          high: { type: Type.NUMBER },
+          unit: { type: Type.STRING }
+        },
+        required: ["low", "high", "unit"]
+      },
+      confidence: { type: Type.STRING },
+      methodology: { type: Type.STRING },
+      proxy_indicators_used: { type: Type.ARRAY, items: { type: Type.STRING } },
+      warning: { type: Type.STRING },
+      reasoning_trace: {
+        type: Type.OBJECT,
+        properties: {
+          data_points_provided: { type: Type.ARRAY, items: { type: Type.STRING } },
+          inferences_drawn: { type: Type.ARRAY, items: { type: Type.STRING } },
+          uncertainties_identified: { type: Type.ARRAY, items: { type: Type.STRING } },
+          counter_evidence_scenarios: { type: Type.ARRAY, items: { type: Type.STRING } }
+        }
+      }
+    },
+    required: ["estimated_range", "confidence", "methodology", "proxy_indicators_used", "warning", "reasoning_trace"]
+  } : {
+    type: Type.OBJECT,
+    properties: {
+      summary: { type: Type.STRING },
+      score: { type: Type.NUMBER },
+      trend: { type: Type.STRING },
+      key_concerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+      comparative_context: { type: Type.STRING },
+      reasoning_trace: {
+        type: Type.OBJECT,
+        properties: {
+          data_points_provided: { type: Type.ARRAY, items: { type: Type.STRING } },
+          inferences_drawn: { type: Type.ARRAY, items: { type: Type.STRING } },
+          uncertainties_identified: { type: Type.ARRAY, items: { type: Type.STRING } },
+          counter_evidence_scenarios: { type: Type.ARRAY, items: { type: Type.STRING } }
+        }
+      }
+    },
+    required: ["summary", "score", "trend", "key_concerns", "comparative_context", "reasoning_trace"]
   };
+
+  try {
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        { role: "system", parts: [{ text: systemPrompt }] },
+        { role: "user", parts: [{ text: userPrompt }] }
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema
+      }
+    });
+
+    return JSON.parse(result.text);
+  } catch (error) {
+    console.error(`AI Tier ${tier} Failure:`, error);
+    return null;
+  }
 }
 
 export async function analyzeStateData(stateName: string): Promise<StateAnalysis | null> {
-  const data = generateMockScores(stateName);
+  const sectors: Sector[] = ["security", "education", "agriculture", "infrastructure", "health", "cost_of_living"];
+  const scores: Record<Sector, SectorScore> = {} as any;
+  const insights: any[] = [];
   
-  const prompt = `
-    Analyze the following data for ${stateName} State, Nigeria, and produce a composite score reasoning verdict.
+  let totalScore = 0;
 
-    --- CURRENT SECTOR SCORES (0–100 scale, higher is better) ---
-    ${JSON.stringify(data.current_scores, null, 2)}
+  for (const sector of sectors) {
+    // TIER 0: Grounding
+    const grounding = getGroundingProtocol(stateName, sector);
+    
+    let aiResult;
+    let isEstimated = false;
 
-    --- HISTORICAL SCORES (same sectors, previous periods) ---
-    ${JSON.stringify(data.historical_scores, null, 2)}
-
-    --- COMPOSITE SCORE ---
-    Overall score: ${data.overall_score} / 100
-    Nigerian state average: ${data.national_average} / 100
-    National rank: ${data.national_rank} of 37
-
-    --- SECTOR WEIGHTS USED ---
-    ${JSON.stringify(data.weights, null, 2)}
-
-    --- STALE DATA THRESHOLD ---
-    Flag any sector where data_age_days exceeds: ${data.stale_threshold_days}
-
-    RULES YOU MUST FOLLOW:
-    1. Ground every claim in the data provided. Do not introduce external facts.
-    2. Be specific with numbers. Focus on Security, Education, Agriculture, and Infrastructure.
-    3. Compare within Nigeria using the provided Percentile ranks (higher percentile = better state performance).
-    4. Identify the single biggest driver of the overall score.
-    5. If a sector score is stale, acknowledge it.
-    6. Maintain political neutrality.
-    7. Do not catastrophize or over-praise.
-    8. Write in second person where helpful.
-    9. Output only valid JSON.
-  `;
-
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              verdict: { type: Type.STRING },
-              scores: {
-                type: Type.OBJECT,
-                properties: {
-                  security: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  },
-                  education: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  },
-                  agriculture: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  },
-                  infrastructure: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  },
-                  health: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  },
-                  cost_of_living: {
-                    type: Type.OBJECT,
-                    properties: {
-                      score: { type: Type.NUMBER },
-                      national_percentile: { type: Type.NUMBER },
-                      source_tier: { type: Type.NUMBER },
-                      data_age_days: { type: Type.NUMBER }
-                    },
-                    required: ["score", "national_percentile", "source_tier", "data_age_days"]
-                  }
-                },
-                required: ["security", "education", "agriculture", "infrastructure", "health", "cost_of_living"]
-              },
-              biggest_driver: {
-                type: Type.OBJECT,
-                properties: {
-                  sector: { type: Type.STRING },
-                  direction: { type: Type.STRING },
-                  one_line: { type: Type.STRING }
-                },
-                required: ["sector", "direction", "one_line"]
-              },
-              sector_insights: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    sector: { type: Type.STRING },
-                    trend: { type: Type.STRING },
-                    insight: { type: Type.STRING },
-                    stale: { type: Type.BOOLEAN }
-                  },
-                  required: ["sector", "trend", "insight", "stale"]
-                }
-              },
-              watch_list: { type: Type.ARRAY, items: { type: Type.STRING } },
-              bright_spots: { type: Type.ARRAY, items: { type: Type.STRING } },
-              confidence_rating: { type: Type.STRING },
-              stale_sectors: { type: Type.ARRAY, items: { type: Type.STRING } },
-              generated_at: { type: Type.STRING }
-            },
-            required: ["verdict", "biggest_driver", "sector_insights", "watch_list", "bright_spots", "confidence_rating", "stale_sectors", "generated_at"]
+    if (grounding.status === "stale_24mo_plus" || grounding.status === "unavailable") {
+      // TIER 2: Gap-Fill Estimator (Exclude security from synthetic estimates as per rules)
+      if (sector === "security") {
+        aiResult = {
+          summary: "Official security data is critically outdated. Synthetic estimation blocked for sovereign safety metrics.",
+          score: 30, // Default low for lack of transparency
+          trend: "insufficient_data",
+          key_concerns: ["Data transparency gap", "Potential blind spots in incident reporting"],
+          comparative_context: "Below national average due to reporting atrophy.",
+          reasoning_trace: {
+            data_points_provided: ["No data within 730 days"],
+            inferences_drawn: ["Critical reporting atrophy detected"],
+            uncertainties_identified: ["True casualty/incident rates unknown"],
+            counter_evidence_scenarios: ["Independent verification by third-party NGOs required"]
           }
-        }
-      });
-
-    const text = response.text;
-    if (!text) return null;
-    const result = JSON.parse(text) as StateAnalysis;
-    result.stateName = stateName;
-    result.overall_score = data.overall_score;
-    result.national_rank = data.national_rank;
-
-    // For demo purposes, if infrastructure is stale (mock logic), mark it as estimated
-    if (result.scores && result.scores.infrastructure && result.scores.infrastructure.data_age_days > 15) {
-      result.scores.infrastructure.is_estimated = true;
-      result.scores.infrastructure.estimate_data = {
-        state: stateName,
-        sector: "infrastructure",
-        estimated_score: result.scores.infrastructure.score,
-        cannot_estimate: false,
-        cannot_estimate_reason: null,
-        drift_from_last_known: -2,
-        drift_justified: true,
-        reasoning: {
-          anchor: `Critical road projects in ${stateName} have faced funding delays over the last 90 days.`,
-          regional_signal: "National grid performance reaching local distribution hubs has stabilized, but secondary networks remain degraded.",
-          grounding_findings: "Satellite imagery and local transit reports suggest a 5% decrease in road maintenance activity across primary corridors.",
-          factors_considered: [
-            { factor: "Fuel distribution", direction: "neutral", weight: "medium" },
-            { factor: "Road project funding", direction: "down", weight: "high" },
-            { factor: "Telecomm coverage", direction: "up", weight: "low" }
-          ],
-          final_logic: `While digital infrastructure is improving, the hardware decay in road networks warrants a 2-point downward correction to ${result.scores.infrastructure.score}.`
-        },
-        confidence: "low",
-        grounding_sources: [
-          { title: "National Infrastructure Audit", url: null, relevance: "Provides baseline for project completion rates." }
-        ],
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        generated_at: new Date().toISOString(),
-        is_estimated: true
-      };
+        };
+      } else {
+        isEstimated = true;
+        aiResult = await invokeAIIntelligence(2, stateName, sector, grounding);
+      }
+    } else {
+      // TIER 1: Narrative Synthesizer
+      aiResult = await invokeAIIntelligence(1, stateName, sector, grounding);
     }
 
-    return result;
-  } catch (error) {
-    console.error("Error analyzing state data:", error);
-    return null;
+    if (aiResult) {
+      const scoreValue = isEstimated ? (aiResult.estimated_range.low + aiResult.estimated_range.high) / 2 : aiResult.score;
+      totalScore += scoreValue;
+
+      scores[sector] = {
+        score: Math.round(scoreValue),
+        national_percentile: Math.round(scoreValue * 0.9), // Simulated
+        source_tier: isEstimated ? 2 : 1,
+        data_age_days: grounding.ageDays || 0,
+        is_estimated: isEstimated,
+        estimate_data: isEstimated ? aiResult : undefined,
+        data_quality: grounding.status as DataQualityFlag,
+        trend: aiResult.trend as Trend
+      };
+
+      insights.push({
+        sector: sector,
+        trend: (aiResult.trend || "stable") as Trend,
+        data_quality_flag: grounding.status as DataQualityFlag,
+        summary: aiResult.summary || (isEstimated ? `AI Estimation: ${aiResult.methodology}` : ""),
+        key_concerns: aiResult.key_concerns || (isEstimated ? [aiResult.warning] : []),
+        comparative_context: aiResult.comparative_context || "Compared to regional peers.",
+        reasoning_trace: aiResult.reasoning_trace
+      });
+    }
   }
+
+  const finalScore = Math.round(totalScore / sectors.length);
+
+  return {
+    stateName,
+    overall_score: finalScore,
+    national_rank: (stateName.length % 36) + 1,
+    verdict: `A critical synthesis of ${stateName} shows a diverse developmental trajectory with significant data ${finalScore > 50 ? 'resilience' : 'atrophy'}.`,
+    scores,
+    biggest_driver: {
+      sector: "security",
+      direction: "stable",
+      one_line: "Security remains the primary anchor of the composite rating."
+    },
+    sector_insights: insights,
+    confidence_rating: finalScore > 40 ? "medium" : "low",
+    generated_at: new Date().toISOString()
+  };
 }
