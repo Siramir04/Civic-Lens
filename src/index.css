@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", var(--font-sans);
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --radius-3xl: 24px;
+  --radius-4xl: 32px;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0A0A0B] text-zinc-100 antialiased selection:bg-white selection:text-black;
+  }
+}
+
