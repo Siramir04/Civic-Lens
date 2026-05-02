@@ -6,8 +6,10 @@ import {
   DataQualityFlag, 
   Trend, 
   AIEstimate,
-  ReasoningTrace
+  ReasoningTrace,
+  FoodPriceData
 } from "../types";
+import { fetchNBSFoodPrices } from "./nbsService";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -19,7 +21,7 @@ const DATA_REPOSITORY: Record<string, any> = {
 
 export function generateMockDataForVault(stateName: string) {
   const seed = stateName.length;
-  const sectors: Sector[] = ["security", "education", "agriculture", "infrastructure", "health", "cost_of_living"];
+  const sectors: Sector[] = ["security", "education", "healthcare", "agriculture", "infrastructure", "cost_of_living", "governance", "environment"];
   
   const vault: Record<string, any> = {};
   
@@ -151,16 +153,27 @@ async function invokeAIIntelligence(
 }
 
 export async function analyzeStateData(stateName: string): Promise<StateAnalysis | null> {
-  const sectors: Sector[] = ["security", "education", "agriculture", "infrastructure", "health", "cost_of_living"];
+  const sectors: Sector[] = ["security", "education", "healthcare", "agriculture", "infrastructure", "cost_of_living", "governance", "environment"];
   const scores: Record<Sector, SectorScore> = {} as any;
   const insights: any[] = [];
   
   let totalScore = 0;
 
+  // Fetch real-world economic ground-truth
+  const foodPrices = await fetchNBSFoodPrices(stateName);
+
   for (const sector of sectors) {
     // TIER 0: Grounding
     const grounding = getGroundingProtocol(stateName, sector);
     
+    // Supplement grounding with real-time food prices if sector is cost_of_living
+    if (sector === "cost_of_living" && foodPrices.length > 0) {
+      grounding.data = {
+        ...grounding.data,
+        real_time_nbs_food_prices: foodPrices
+      };
+      grounding.status = "current"; // Force current status if we have real-time NBS data
+    }
     let aiResult;
     let isEstimated = false;
 
@@ -224,6 +237,7 @@ export async function analyzeStateData(stateName: string): Promise<StateAnalysis
     national_rank: (stateName.length % 36) + 1,
     verdict: `A critical synthesis of ${stateName} shows a diverse developmental trajectory with significant data ${finalScore > 50 ? 'resilience' : 'atrophy'}.`,
     scores,
+    food_prices: foodPrices,
     biggest_driver: {
       sector: "security",
       direction: "stable",

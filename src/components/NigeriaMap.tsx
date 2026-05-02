@@ -102,12 +102,12 @@ export default function NigeriaMap({ onStateSelect, selectedStateId, comparisonS
   ), [selectedStateId, comparisonStateId, hoveredState, onStateSelect]);
 
   return (
-    <div className="relative w-full h-[600px] bg-zinc-950 overflow-hidden group">
+    <div className="relative w-full h-[400px] md:h-[600px] bg-zinc-950 overflow-hidden group">
       {mapInstance}
 
-      {/* Map Legend/Overlay */}
-      <div className="absolute top-6 right-6 z-[1000] flex flex-col gap-4">
-         <div className="p-4 border border-zinc-800 bg-zinc-950/90 rounded-3xl backdrop-blur-md flex flex-col gap-4 w-56 shadow-2xl">
+      {/* Map Legend/Overlay - Responsive Visibility */}
+      <div className="absolute top-4 right-4 md:top-6 md:right-6 z-[1000] flex flex-col gap-4">
+         <div className="hidden sm:flex p-4 border border-zinc-800 bg-zinc-950/90 rounded-3xl backdrop-blur-md flex-col gap-4 w-56 shadow-2xl">
            <div>
              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest font-black block mb-3">State Quality Index</span>
              <div className="flex flex-col gap-2">
@@ -148,15 +148,15 @@ export default function NigeriaMap({ onStateSelect, selectedStateId, comparisonS
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="absolute top-6 left-6 z-[1000] pointer-events-none"
+            className="absolute top-4 left-4 md:top-6 md:left-6 z-[1000] pointer-events-none"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white text-zinc-900 rounded shadow-lg">
-                <MapPin size={20} />
+              <div className="p-2 bg-white text-zinc-900 rounded shadow-lg shrink-0">
+                <MapPin size={16} className="md:size-5" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest leading-none mb-1">Target Initialized</span>
-                <h2 className="text-3xl font-display font-black text-white uppercase tracking-tighter leading-none">
+                <span className="text-[8px] md:text-[10px] font-mono text-zinc-500 uppercase tracking-widest leading-none mb-1">Target Active</span>
+                <h2 className="text-xl md:text-3xl font-display font-black text-white uppercase tracking-tighter leading-none">
                   {NIGERIA_STATES.find(s => s.id === selectedStateId)?.name}
                 </h2>
               </div>
@@ -166,16 +166,16 @@ export default function NigeriaMap({ onStateSelect, selectedStateId, comparisonS
       </AnimatePresence>
 
       {/* Manual Reset View */}
-      <div className="absolute bottom-6 left-6 z-[1000]">
+      <div className="absolute bottom-4 left-4 md:bottom-6 md:left-6 z-[1000]">
         <button 
           onClick={(e) => {
             e.stopPropagation();
             onStateSelect("");
           }}
-          className="p-3 bg-zinc-900 border border-zinc-800 rounded group hover:border-white transition-all shadow-xl flex items-center gap-2"
+          className="p-2 md:p-3 bg-zinc-900 border border-zinc-800 rounded-xl group hover:border-white transition-all shadow-xl flex items-center gap-2"
         >
-          <RotateCcw size={16} className="text-zinc-500 group-hover:text-white transition-colors" />
-          <span className="text-[10px] font-mono text-zinc-500 group-hover:text-white uppercase tracking-widest">Reset View</span>
+          <RotateCcw size={14} className="md:size-4 text-zinc-500 group-hover:text-white transition-colors" />
+          <span className="text-[9px] md:text-[10px] font-mono text-zinc-500 group-hover:text-white uppercase tracking-widest">Reset View</span>
         </button>
       </div>
     </div>

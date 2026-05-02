@@ -1,20 +1,21 @@
 
-export type Sector = "security" | "health" | "education" | "agriculture" | "economy" | "infrastructure" | "governance" | "cost_of_living";
+export type Sector = "security" | "education" | "healthcare" | "agriculture" | "infrastructure" | "cost_of_living" | "governance" | "environment";
 
 export type DataQualityFlag = "current" | "stale_12_24mo" | "stale_24mo_plus" | "partial" | "unavailable";
 export type Trend = "improving" | "declining" | "stable" | "mixed" | "insufficient_data";
 
 export interface NewsItem {
   headline: string;
-  source: string;
-  date: string;
-  location: { state: string; lga: string | null };
-  sector_relevance: Sector[];
-  event_type: "conflict" | "policy" | "infrastructure" | "climate" | "health" | "education" | "economic";
-  source_claims: { claim: string; quantified: boolean }[];
-  verification_status: "verified" | "partial" | "unverified";
-  narrative_relevance: string;
-  published_at?: string; // Backwards compat
+  summary: string;
+  source_name: string;
+  source_url: string | null;
+  source_url_status?: "verified_live" | "scraped_unverified" | null;
+  display_restriction?: "summary_only_no_link" | null;
+  published_date: string;
+  state_relevance: string[];
+  sector_tags: Sector[];
+  verification_status: "verified" | "partial" | "single_source";
+  key_claims: { claim: string; attributed_to: string }[];
 }
 
 export interface ReasoningTrace {
@@ -47,12 +48,23 @@ export interface AIEstimate {
   generated_at: string;
 }
 
+export interface FoodPriceData {
+  item: string;
+  price: number;
+  unit: string;
+  trend: 'up' | 'down' | 'stable';
+  month: string;
+  year: number;
+  data_quality: string;
+}
+
 export interface StateAnalysis {
   stateName: string;
   overall_score: number;
   national_rank: number;
   verdict: string;
   scores: Record<Sector, SectorScore>;
+  food_prices?: FoodPriceData[];
   biggest_driver: {
     sector: Sector;
     direction: "improving" | "declining" | "stable";

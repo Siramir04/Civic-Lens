@@ -5,32 +5,28 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function generateStateNews(stateName: string): Promise<NewsItem[]> {
   const prompt = `
-    You are a news intelligence analyst for CivicLens (Tier 3 Grounding). 
-    Extract structured signals relevant to development in ${stateName} State, Nigeria.
+    You are CivicLens's news intelligence engine. Your output feeds directly 
+    into a double-tap-to-open interface. Users will be taken to source_url 
+    with no intermediate confirmation. A broken link destroys trust permanently.
 
-    EXTRACTION RULES:
-    1. Extract: event type, location (state/LGA if specified), date, actors, stated impacts, source publication.
-    2. Do NOT quantify impacts unless explicitly stated. Preserve as "source_claim".
-    3. Assess: relevance to which sector(s), geographic specificity, temporal proximity.
-    4. Flag: unverified claims, partisan framing, conflicting accounts.
-    5. Prioritize recency (last 14 days).
+    TARGET: ${stateName} State, Nigeria.
 
-    OUTPUT FORMAT:
-    {
-      "events": [
-        {
-          "headline": "string",
-          "source": "string",
-          "date": "ISO8601",
-          "location": {"state": "string", "lga": "string | null"},
-          "sector_relevance": ["security" | "health" | "education" | "agriculture" | "economy" | "infrastructure" | "governance" | "cost_of_living"],
-          "event_type": "conflict | policy | infrastructure | climate | health | education | economic",
-          "source_claims": [{"claim": "string", "quantified": boolean}],
-          "verification_status": "verified | partial | unverified",
-          "narrative_relevance": "string (1 sentence)"
-        }
-      ]
-    }
+    ## ABSOLUTE RULES
+    1. source_url MUST be a direct, absolute URL to the specific article.
+       - CORRECT: "https://www.premiumtimesng.com/news/headlines/123456-example.html"
+       - WRONG: "https://www.premiumtimesng.com" (homepage)
+       - WRONG: Any URL you constructed, inferred, or "guessed" looks right
+    2. If you cannot verify the exact article URL through your tools, you MUST return "source_url": null and set source_url_status accordingly.
+    3. NEVER fabricate, complete, or "fix" a partial URL.
+
+    ## SECTOR TAGS (allowed values only)
+    ["security", "education", "healthcare", "agriculture", "infrastructure", 
+     "cost_of_living", "governance", "environment"]
+
+    ## VERIFICATION TIERS
+    - "verified": Claim appears in 2+ independent sources OR official govt source
+    - "partial": Claim appears in 1 reputable source with named attribution
+    - "single_source": Claim appears in 1 source without clear attribution
   `;
 
   try {
@@ -42,43 +38,38 @@ export async function generateStateNews(stateName: string): Promise<NewsItem[]> 
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            events: {
+            news: {
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
                 properties: {
                   headline: { type: Type.STRING },
-                  source: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  location: {
-                    type: Type.OBJECT,
-                    properties: {
-                      state: { type: Type.STRING },
-                      lga: { type: Type.STRING, nullable: true }
-                    },
-                    required: ["state", "lga"]
-                  },
-                  sector_relevance: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  event_type: { type: Type.STRING },
-                  source_claims: {
+                  summary: { type: Type.STRING },
+                  source_name: { type: Type.STRING },
+                  source_url: { type: Type.STRING, nullable: true },
+                  source_url_status: { type: Type.STRING, enum: ["verified_live", "scraped_unverified", "null"] },
+                  display_restriction: { type: Type.STRING, enum: ["summary_only_no_link", "none"], nullable: true },
+                  published_date: { type: Type.STRING },
+                  state_relevance: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  sector_tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  verification_status: { type: Type.STRING, enum: ["verified", "partial", "single_source"] },
+                  key_claims: {
                     type: Type.ARRAY,
                     items: {
                       type: Type.OBJECT,
                       properties: {
                         claim: { type: Type.STRING },
-                        quantified: { type: Type.BOOLEAN }
+                        attributed_to: { type: Type.STRING }
                       },
-                      required: ["claim", "quantified"]
+                      required: ["claim", "attributed_to"]
                     }
-                  },
-                  verification_status: { type: Type.STRING },
-                  narrative_relevance: { type: Type.STRING }
+                  }
                 },
-                required: ["headline", "source", "date", "location", "sector_relevance", "event_type", "source_claims", "verification_status", "narrative_relevance"]
+                required: ["headline", "summary", "source_name", "source_url", "source_url_status", "published_date", "state_relevance", "sector_tags", "verification_status", "key_claims"]
               }
             }
           },
-          required: ["events"]
+          required: ["news"]
         },
         tools: [{ googleSearch: {} }],
       },
@@ -87,7 +78,7 @@ export async function generateStateNews(stateName: string): Promise<NewsItem[]> 
     const text = response.text;
     if (!text) return [];
     const result = JSON.parse(text);
-    return result.events;
+    return result.news;
   } catch (error) {
     console.error("Error generating news signals:", error);
     return [];
